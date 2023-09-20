@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Custom Map with Markers</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="style.css"> 
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+</head>
+<body>  
+    <section class="frontpage">
+        <div class="title">
+            <h1>The Map Game</h1>
+        </div>
+        <div id="statusMessage" class="status-message"></div>
+        <div class="bonus">
+            <p><span id="remainingBonusKm">1500</span> kilometers left</p>
+        </div>
+        <div class="city">
+            <h2 id="cityName"></h2>
+        </div>
+        
+        <div class="map_block">
+            <div id="map" class="map">
+                <div class="transparent_block_top"></div>
+                <div class="transparent_block_left"></div>
+                <div class="transparent_block_bottom"></div>
+            </div>
+    
+            <div id="imageOverlay" class="image-overlay"></div>
+        </div>
+        
+        <h2 id="message"></h2>
+        
+        <div class="distance" style="display: none;">
+            <p id="distanceInfo">Distance: <span id="distanceValue">N/A</span> km</p>
+        </div>
+        <div class="buttons">
+        <button class="resetButton" id="resetButton">Reset</button>
+        <button class="nextCityButton" id="nextCityButton" style="display: none;" disabled>Next City</button>
+        </div>
+    </section>
+    <style>
+        
+        .leaflet-control-zoom {
+            display: none;
+        }
+    </style>
+    <script>
+        /* Array of city objects with names and coordinates */
+        var cities = [
+            { name: "Zurich", lat: 47.3769, long: 8.5417 },
+            { name: "Paris", lat: 48.8566, long: 2.3522 },
+            { name: "Madrid", lat: 40.4168, long: -3.7038 },
+            { name: "London", lat: 51.5072, long: -0.1276 },
+            { name: "Berlin", lat: 52.5200, long: 13.4050 },
+            { name: "Amsterdam", lat: 52.3676, long: 4.9041 },
+            { name: "Rome", lat: 41.9028, long: 12.4964 },
+            { name: "Oslo", lat: 59.9139, long: 10.7522 },
+            { name: "Vienna", lat: 48.2082, long: 16.3738 }
+        ];
+
+        /*Map centered in Europe */
+        var map = L.map('map', {
+            center: [51.02, 8.1515],
+            zoom: 3.5,
+            minZoom: 3.5,
+            maxZoom: 3.5,
+            dragging: false,
+            scrollWheelZoom: false,
+        });
+
+        /*markers */
+        var markerLayer = L.layerGroup().addTo(map);
+        var cityMarkerLayer = L.layerGroup().addTo(map);
+
+        /* Score */
+        var remainingBonusKm = 1500;
+
+        var hasClicked = false;
+        var randomIndex = -1;
+        var randomCity = null;
+
+        /* Cities */
+        var shownCities = [];
+
+        /* City index for the counter */
+        var currentCityIndex = -1;
+
+        /* Harversine formula -> distances must consider the curvature of the Earth */
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371; /* Ratio of the Earth */
+            const dLat = (lat2 - lat1) * (Math.PI / 180);
+            const dLon = (lon2 - lon1) * (Math.PI / 180);
+            const a =
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            const distance = R * c; 
+            return distance;
+        }
+
+        function showDistanceDisplay() {
+            var distanceDisplay = document.querySelector('.distance');
+            distanceDisplay.style.display = 'block';
+        }
+
+       
+        function hideDistanceDisplay() {
+            var distanceDisplay = document.querySelector('.distance');
+            distanceDisplay.style.display = 'none';
+        }
+
+        function updateNextCityButtonState() {
+            var nextCityButton = document.getElementById('nextCityButton');
+
+            if (remainingBonusKm > 0 || !hasClicked) {
+                nextCityButton.style.display = 'block';
+                nextCityButton.disabled = false;
+            } else {
+                nextCityButton.style.display = 'none'; 
+                nextCityButton.disabled = true; 
+            }
+        }
+
+        function checkIfLost() {
+            if (remainingBonusKm <= 0 && shownCities.length < cities.length) {
+                showMessage("Game over. You ran out of bonus kilometers and didn't find all the cities.", "error");
+                var nextCityButton = document.getElementById('nextCityButton');
+                nextCityButton.style.display = 'none'; 
+            }
+        }
+
+        function updateStatusMessage() {
+            var statusMessage = document.getElementById('statusMessage');
+            var citiesLeft = cities.length - shownCities.length;
+            var citiesPlaced = cities.length - citiesLeft;
+
+            if (citiesLeft > 0) {
+                statusMessage.textContent = `${citiesPlaced-1} cities placed`;
+            } else {
+                statusMessage.textContent = `Congratulations! You've found all the cities.`;
+            }
+        }
+
+        function generateRandomCity() {
+            if (shownCities.length === cities.length) {
+                if (currentCityIndex === cities.length - 1) {
+                    showMessage("Congratulations! You've reached the end of the game.");
+                    var nextCityButton = document.getElementById('nextCityButton');
+                    nextCityButton.style.display = 'none'; 
+                } else {
+                    showMessage("Uhu! You found all the cities.");
+                }
+                return;
+            }
+
+            var newIndex;
+            do {
+                newIndex = Math.floor(Math.random() * cities.length);
+            } while (shownCities.includes(newIndex));
+
+            shownCities.push(newIndex);
+
+            currentCityIndex = newIndex;
+            randomIndex = newIndex;
+            randomCity = cities[randomIndex];
+
+            document.getElementById('cityName').textContent = "Select the location of " + randomCity.name + "!";
+            markerLayer.clearLayers();
+            cityMarkerLayer.clearLayers();
+
+            showMessage(""); 
+            hasClicked = false;
+            updateNextCityButtonState();
+            updateStatusMessage();
+        }
+
+        map.on('click', function (e) {
+            if (hasClicked) {
+                return;
+            }
+
+            var distance = calculateDistance(e.latlng.lat, e.latlng.lng, randomCity.lat, randomCity.long);
+
+            var distanceValueElement = document.getElementById('distanceValue');
+            distanceValueElement.textContent = distance.toFixed(2); 
+
+            remainingBonusKm -= distance;
+
+            if (remainingBonusKm < 0) {
+                remainingBonusKm = 0;
+            }
+
+            var remainingBonusKmElement = document.getElementById('remainingBonusKm');
+            remainingBonusKmElement.textContent = remainingBonusKm.toFixed(2); 
+
+            var marker = L.marker(e.latlng).addTo(markerLayer);
+            var cityMarker = L.marker([randomCity.lat, randomCity.long], { icon: redIcon }).addTo(cityMarkerLayer);
+            hasClicked = true;
+
+            showDistanceDisplay(); 
+
+            updateNextCityButtonState();
+            updateStatusMessage();
+            checkIfLost();
+        });
+
+        document.getElementById('nextCityButton').addEventListener('click', function () {
+            hideDistanceDisplay(); 
+            remainingBonusKm = 1500;
+            var remainingBonusKmElement = document.getElementById('remainingBonusKm');
+            remainingBonusKmElement.textContent = remainingBonusKm.toFixed(2);
+            shownCities = [];
+            currentCityIndex = -1;
+            generateRandomCity();
+        });
+
+        document.getElementById('resetButton').addEventListener('click', function () {
+            hideDistanceDisplay(); // Hide the distance display
+            remainingBonusKm = 1500;
+            var remainingBonusKmElement = document.getElementById('remainingBonusKm');
+            remainingBonusKmElement.textContent = remainingBonusKm.toFixed(2);
+            shownCities = [];
+            currentCityIndex = -1;
+            generateRandomCity();
+        });
+
+        var imageUrl = 'mapII.jpg'; 
+        var imageBounds = map.getBounds(); 
+        var imageOverlay = L.imageOverlay(imageUrl, imageBounds).addTo(map);
+        imageOverlay.getElement().style.transform = 'scale(0.9)';
+
+        var redIcon = L.icon({
+            iconUrl: 'red_pin.webp', 
+            iconSize: [32, 32],
+            iconAnchor: [16, 32],
+            popupAnchor: [0, -32]
+        });
+
+        function showMessage(message, className) {
+            var messageElement = document.getElementById('message');
+            messageElement.textContent = message;
+            messageElement.className = className;
+        }
+
+        generateRandomCity();
+        updateNextCityButtonState();
+        updateStatusMessage();
+        checkIfLost(); 
+    </script>
+</body>
+</html>
