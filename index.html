@@ -210,17 +210,25 @@
         });
 
         document.getElementById('nextCityButton').addEventListener('click', function () {
-            hideDistanceDisplay(); 
-            remainingBonusKm = 1500;
-            var remainingBonusKmElement = document.getElementById('remainingBonusKm');
-            remainingBonusKmElement.textContent = remainingBonusKm.toFixed(2);
-            shownCities = [];
-            currentCityIndex = -1;
-            generateRandomCity();
+            if (hasClicked) {
+                var distance = calculateDistance(randomCity.lat, randomCity.long, randomCity.lat, randomCity.long); // This will result in a distance of 0 for the clicked city.
+                remainingBonusKm -= distance;
+        
+                
+                if (remainingBonusKm < 0) {
+                    remainingBonusKm = 0;
+                }
+        
+                var remainingBonusKmElement = document.getElementById('remainingBonusKm');
+                remainingBonusKmElement.textContent = remainingBonusKm.toFixed(2);
+        
+                shownCities = [];
+                currentCityIndex = -1;
+                generateRandomCity();
+            }
         });
-
         document.getElementById('resetButton').addEventListener('click', function () {
-            hideDistanceDisplay(); // Hide the distance display
+            hideDistanceDisplay(); 
             remainingBonusKm = 1500;
             var remainingBonusKmElement = document.getElementById('remainingBonusKm');
             remainingBonusKmElement.textContent = remainingBonusKm.toFixed(2);
